@@ -36,20 +36,22 @@ def IPcont2(ip):
     iplist = []
     if re.match(r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$",
                 ip):
-        print("IP vaild")
-        ip = ip.split(".")
-
+        #print("IP vaild")
+        '''ip = ip.split(".")
         if int(ip[3]) == 0:
             for ip[3] in range(1, 254):
                 iplist.append(str(ip[0]+"."+ip[1]+"."+ip[2]+"."+str(ip[3])))
-            print(iplist)
+            print(iplist)'''
+        return 1
 
     else:
-        print("IP invaild")
+        '''print("IP invaild")'''
         if re.match(r"^(?:[A-F0-9]{1,4}:){7}[A-F0-9]{1,4}$", ip, re.I):
-            print("IPv6 vaild")
+            #print("IPv6 vaild")
+            return 1
         else:
-            print("IPv6 invaild")
+            '''print("IPv6 invaild")'''
+            return 0
 
 
 
@@ -72,9 +74,12 @@ def Ping_S(ip):
     #读取返回信息
     data = check.stdout.read()
     data = data.decode("gbk")
-    print("域名IP地址为:"+socket.gethostbyname(ip))
+    ip=str(ip)
+    ip = ip.split('/',1)[0]
+    if IPcont2(ip) != 1:
+        print("域名IP地址为:"+socket.gethostbyname(ip))
     if 'TTL' in data:
-        sys.stdout.write('%s is live' % ip)
+        print('%s 状态：存在' % ip)
 
 '''
 TCP端口连接
@@ -97,7 +102,7 @@ def TCP_Scan(ip, port):
         '''s.send('Only see you\n')
         banner = s.recv(1024)'''
         if result == 0:
-            print('端口开发:%d' % port)
+            print('端口开放:%d' % port)
         else:
             print('端口关闭:%d' % port)
         s.close()
@@ -126,7 +131,7 @@ def Tcp_S(ip, i):
             #time.sleep(0.1)
             #多线程调用TCO_Scan扫描
             _thread.start_new_thread(TCP_Scan, (ip, port,))
-            time.sleep(0.1)
+            time.sleep(0.3)
             #ConScan(ip, int(port))
     else:
         for port in ports:
@@ -178,7 +183,7 @@ def Syn_S(ip, i):
             # _thread.start_new_thread(Ping_S, (a,))
             # time.sleep(0.1)
             _thread.start_new_thread(Syn_scan, (ip, port,))
-            time.sleep(0.1)
+            time.sleep(0.3)
             # ConScan(ip, int(port))
     else:
         for port in ports:
@@ -209,10 +214,11 @@ ARP扫描
 功能：扫描本地IPc段的ip与物理地址
 '''
 def arp_scan():
+    print("自动选取网段(注：如果机器存在多网段会选择错误网段)，需手动修改IP")
     localnet = get_local()
     result = []
     for ipfix in range(1, 254):
-        ip = localnet + "."+str(ipfix)
+        ip = '192.168.43' + "."+str(ipfix)
         #构造ARP包
         arppkt = Ether(dst="ff:ff:ff:ff:ff:ff")/ARP(pdst=ip, hwdst="ff:ff:ff:ff:ff:ff")
         #发送并接受返回包
@@ -224,20 +230,29 @@ def arp_scan():
         else:
             print("IP:"+ip+"!ARP扫描失败!")
 
+
 '''
 真实的udp扫描
 '''
 def udp_scan(ip, port):
-    print(ip,port)
     try:
-        packet = IP(dst=ip)/UDP(dorp=port, sport=randint(1, 65535))
-        result = sr1(packet, timeout=5, verbose=0)
+        packet = IP(dst=ip)/UDP(dorp=int(port),sport=randint(1,65535))
+        result = sr1(packet,timeout=5,verbose=0)
         time.sleep(0.1)
         if result is None:
-            print("IP"+ip+":"+str(port)+"is open")
+            print("IP" + ip + str(port) + ":开放")
     except:
-        print("!扫描失败!")
-    print()
+        print("扫描失败")
+
+    '''if (str(type(result))) == "<class 'NoneType'>":
+        print("IP" + ip + str(port) + ":开放")
+    elif (result.haslayer(UDP)):
+        if(result.getlayer(TCP).flags == "R"):
+            print("IP"+ip+str(port)+":开放")
+    elif(result.haslayer(ICMP)):
+        if (int(result.getlayer(ICMP).type) == 3 and int(result.getlayer(ICMP).code) in [1, 2, 3, 9, 10,13]):
+            print("未开放")
+    return'''
 
 '''
 调用Udp批量扫描
@@ -246,16 +261,17 @@ def udp_scan(ip, port):
 def udp_s(ip):
     ports = input("请输入你想测试的端口号\n(','隔开,all即为全部探测):")
     ports = ports.split(",")
+
     if ports[0] == 'all':
         for port in range(1, 65535):
             # _thread.start_new_thread(Ping_S, (a,))
             # time.sleep(0.1)
             _thread.start_new_thread(udp_scan, (ip, port,))
-            time.sleep(0.1)
+            time.sleep(0.3)
             # ConScan(ip, int(port))
     else:
         for port in ports:
-            udp_scan(ip, int(port))
+            udp_scan(ip, port)
     #print()
 
 '''
@@ -271,7 +287,16 @@ def main(argv):
         #长短命令的参数捕捉
         opts, args = getopt.getopt(argv, 'hpsuti:a:', ['help', 'ip=', 'post=', 'arp'])
     except getopt.GetoptError:
-        print('main,py -s/t/p 端口号 --ip ip地址')
+        print("标准样式main.py -p -i 127.0.0.1")
+        print("扫描方式：")
+        print("-p ping扫描：探测主机活性和网站活性,以及子网内主机存在状态")
+        print("-t TCP全扫描：扫描网站或ip的端口号(不带参数调用后续提示输入)")
+        print("-s SYN扫描：扫描网站或ip的端口号(不带参数调用后续提示输入)")
+        print("-u UDP扫描")
+        print("--arp ARP扫描：或者本地IP C段的IP与物理地址，不用跟-i -a")
+        print("用户目标选定：")
+        print("-i 输入形式为目标IP地址")
+        print("-a 输入形式为目标网址")
         sys.exit()
     #print(opts)
     for opt, arg in opts:
@@ -334,7 +359,6 @@ def main(argv):
                             #多线程调用Ping_S函数
                             _thread.start_new_thread(Ping_S, (a,))
                             time.sleep(0.1)
-
                     else:
                         Ping_S(ip)
 
@@ -359,13 +383,9 @@ def main(argv):
                     sys.exit()
             sys.exit()
 
-
-
 # Press the green button in the gutter to run the script.
-
 if __name__ == '__main__':
     main(sys.argv[1:])
-
     #IPcont2("127.0.0.0")
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
